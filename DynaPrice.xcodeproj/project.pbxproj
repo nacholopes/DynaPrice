@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0E7987AC2CDAB741003A9E74 /* DynaPrice.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 0E7987AA2CDAB741003A9E74 /* DynaPrice.xcdatamodeld */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0E79878B2CDAB639003A9E74 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,11 +31,25 @@
 		0E79877A2CDAB637003A9E74 /* DynaPrice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DynaPrice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E79878A2CDAB639003A9E74 /* DynaPriceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DynaPriceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E7987942CDAB639003A9E74 /* DynaPriceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DynaPriceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0E7987AB2CDAB741003A9E74 /* DynaPrice.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = DynaPrice.xcdatamodel; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0E7987CA2CDE9C14003A9E74 /* Exceptions for "DynaPrice" folder in "DynaPrice" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0E7987792CDAB637003A9E74 /* DynaPrice */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0E79877C2CDAB637003A9E74 /* DynaPrice */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0E7987CA2CDE9C14003A9E74 /* Exceptions for "DynaPrice" folder in "DynaPrice" target */,
+			);
 			path = DynaPrice;
 			sourceTree = "<group>";
 		};
@@ -75,6 +93,7 @@
 		0E7987712CDAB637003A9E74 = {
 			isa = PBXGroup;
 			children = (
+				0E7987AA2CDAB741003A9E74 /* DynaPrice.xcdatamodeld */,
 				0E79877C2CDAB637003A9E74 /* DynaPrice */,
 				0E79878D2CDAB639003A9E74 /* DynaPriceTests */,
 				0E7987972CDAB639003A9E74 /* DynaPriceUITests */,
@@ -236,6 +255,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0E7987AC2CDAB741003A9E74 /* DynaPrice.xcdatamodeld in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,7 +341,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -378,7 +398,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -399,6 +419,7 @@
 				DEVELOPMENT_TEAM = N3NGYKQZ9Y;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DynaPrice/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -428,6 +449,7 @@
 				DEVELOPMENT_TEAM = N3NGYKQZ9Y;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DynaPrice/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -558,6 +580,19 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		0E7987AA2CDAB741003A9E74 /* DynaPrice.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				0E7987AB2CDAB741003A9E74 /* DynaPrice.xcdatamodel */,
+			);
+			currentVersion = 0E7987AB2CDAB741003A9E74 /* DynaPrice.xcdatamodel */;
+			path = DynaPrice.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
 	};
 	rootObject = 0E7987722CDAB637003A9E74 /* Project object */;
 }

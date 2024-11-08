@@ -1,21 +1,10 @@
-//
-//  ContentView.swift
-//  DynaPrice
-//
-//  Created by Eduardo Lopes on 05/11/24.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.managedObjectContext) private var viewContext
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        LoginView(context: viewContext)
     }
 }
 
