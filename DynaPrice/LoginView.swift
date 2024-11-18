@@ -1,35 +1,37 @@
 import SwiftUI
-import CoreData
 
 struct LoginView: View {
-    @StateObject private var viewModel: AuthenticationViewModel
+    @ObservedObject var authViewModel: AuthenticationViewModel
+    @FocusState private var focusedField: Field?
     
-    init(context: NSManagedObjectContext) {
-        _viewModel = StateObject(wrappedValue: AuthenticationViewModel(context: context))
+    enum Field {
+        case email, password
     }
     
     var body: some View {
-        Group {
-            if viewModel.isAuthenticated {
-                MainTabView()
-            } else {
+        NavigationView {
+            ScrollView {
                 VStack(spacing: 20) {
+                    Spacer(minLength: 50)
+                    
                     Text("DynaPrice")
                         .font(.largeTitle)
                         .bold()
                     
                     VStack(spacing: 15) {
-                        TextField("Email", text: $viewModel.email)
+                        TextField("Email", text: $authViewModel.email)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .autocapitalization(.none)
                             .keyboardType(.emailAddress)
+                            .focused($focusedField, equals: .email)
                         
-                        SecureField("Password", text: $viewModel.password)
+                        SecureField("Password", text: $authViewModel.password)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .focused($focusedField, equals: .password)
                         
                         Button(action: {
-                            print("Login button tapped")
-                            viewModel.login()
+                            focusedField = nil
+                            authViewModel.login()
                         }) {
                             Text("Login")
                                 .frame(maxWidth: .infinity)
@@ -41,8 +43,8 @@ struct LoginView: View {
                     }
                     .padding()
                     
-                    if viewModel.showError {
-                        Text(viewModel.errorMessage)
+                    if authViewModel.showError {
+                        Text(authViewModel.errorMessage)
                             .foregroundColor(.red)
                     }
                 }
@@ -50,8 +52,4 @@ struct LoginView: View {
             }
         }
     }
-}
-
-#Preview {
-    MonitoringView()
 }

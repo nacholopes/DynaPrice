@@ -12,47 +12,52 @@ class AuthenticationViewModel: ObservableObject {
     
     init(context: NSManagedObjectContext) {
         self.viewContext = context
-        print("ViewModel initialized")
-        createTestUserIfNeeded() // Create test user right away
+        // Load saved credentials and auto-login if they exist
+        if let savedEmail = UserDefaults.standard.string(forKey: "userEmail"),
+           let savedPassword = UserDefaults.standard.string(forKey: "userPassword") {
+            self.email = savedEmail
+            self.password = savedPassword
+            login()
+        }
     }
     
     func login() {
-        print("Login attempted with email: \(email)")
+        createTestUserIfNeeded()
         
-        // Basic validation
         guard !email.isEmpty, !password.isEmpty else {
-            print("Empty fields detected")
             showError = true
             errorMessage = "Please fill in all fields"
             return
         }
         
-        // Check credentials
         let request = NSFetchRequest<User>(entityName: "User")
         request.predicate = NSPredicate(format: "email == %@ AND passwordHash == %@ AND isActive == true", email, password)
         
         do {
             let users = try viewContext.fetch(request)
-            print("Found \(users.count) matching users")
-            
-            if let user = users.first {
-                print("Login successful for user: \(user.email ?? "unknown")")
+            if let _ = users.first {
                 isAuthenticated = true
                 showError = false
-                
-                // Update last login
-                user.lastLogin = Date()
-                try? viewContext.save()
+                // Save credentials
+                UserDefaults.standard.set(email, forKey: "userEmail")
+                UserDefaults.standard.set(password, forKey: "userPassword")
             } else {
-                print("No matching user found")
                 showError = true
                 errorMessage = "Invalid credentials"
             }
         } catch {
-            print("Login error: \(error.localizedDescription)")
             showError = true
             errorMessage = "Login failed: \(error.localizedDescription)"
         }
+    }
+    
+    func logout() {
+        isAuthenticated = false
+        email = ""
+        password = ""
+        // Clear saved credentials
+        UserDefaults.standard.removeObject(forKey: "userEmail")
+        UserDefaults.standard.removeObject(forKey: "userPassword")
     }
     
     private func createTestUserIfNeeded() {
@@ -60,10 +65,7 @@ class AuthenticationViewModel: ObservableObject {
         
         do {
             let count = try viewContext.count(for: request)
-            print("Current user count: \(count)")
-            
             if count == 0 {
-                print("Creating test user")
                 let newUser = User(context: viewContext)
                 newUser.id = UUID()
                 newUser.email = "admin@test.com"
@@ -73,7 +75,6 @@ class AuthenticationViewModel: ObservableObject {
                 newUser.lastLogin = Date()
                 
                 try viewContext.save()
-                print("Test user created successfully")
             }
         } catch {
             print("Error creating test user: \(error)")

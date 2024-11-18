@@ -13,64 +13,88 @@ class ProductImporter: ObservableObject {
         self.viewContext = context
     }
     
+    private func parsePrice(from string: String) -> Double {
+        // Remove newlines, currency symbol, and spaces
+        var cleanString = string
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "R$", with: "")
+            .replacingOccurrences(of: "\u{00A0}", with: "") // Remove non-breaking space
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Replace comma with dot for decimal
+        cleanString = cleanString.replacingOccurrences(of: ",", with: ".")
+        
+        // Try to convert to Double
+        if let price = Double(cleanString) {
+            return price
+        }
+        
+        print("Could not parse price from string: '\(string)', cleaned string: '\(cleanString)'")
+        return 0.0
+    }
+    
     func importProducts(from csvString: String) {
         isImporting = true
         importError = nil
         
-        let rows = csvString.components(separatedBy: "\n")
-        let headerRow = rows[0].components(separatedBy: ";")
-        
-        // Clear existing products
-        clearExistingProducts()
-        
+        // Clean the CSV string to remove any problematic characters
+        let cleanCSV = csvString.replacingOccurrences(of: "\r", with: "")
+        let rows = cleanCSV.components(separatedBy: "\n")
         var importedCount = 0
         
-        for row in rows.dropFirst() where !row.isEmpty {
-            let columns = row.components(separatedBy: ";")
-            if columns.count >= headerRow.count {
-                let product = Product(context: viewContext)
-                product.itemCode = columns[0]
-                product.ean = columns[1]
-                product.name = columns[2]
-                product.brand = columns[3]
-                
-                // Convert price string (e.g., "R$ 21,99") to Double
-                if let priceStr = columns[10].replacingOccurrences(of: "R$ ", with: "")
-                    .replacingOccurrences(of: ",", with: ".")
-                    .trimmingCharacters(in: .whitespacesAndNewlines) as String?,
-                   let price = Double(priceStr) {
-                    product.currentPrice = price
-                }
-                
-                product.department = columns[9]
-                product.category = columns[8]
-                product.lastUpdate = Date()
-                product.templateId = 1 // Default template ID
-                importedCount += 1
-            }
-        }
-        
         do {
+            // Clear existing products first
+            let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Product.fetchRequest()
+            let batchDeleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            try viewContext.execute(batchDeleteRequest)
+            viewContext.reset() // Reset the context after batch delete
+            
+            // Process each row and create products
+            for row in rows.dropFirst() where !row.isEmpty {
+                let columns = row.components(separatedBy: ";")
+                
+                if columns.count >= 12 {
+                    let product = Product(context: viewContext)
+                    product.itemCode = columns[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.ean = columns[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.name = columns[2].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.brand = columns[3].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.productDescription = columns[4].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.category = columns[8].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.department = columns[9].trimmingCharacters(in: .whitespacesAndNewlines)
+                    product.currentPrice = parsePrice(from: columns[11])
+                    product.lastUpdate = Date()
+                    
+                    importedCount += 1
+                    
+                    // Save periodically to avoid memory issues
+                    if importedCount % 50 == 0 {
+                        try viewContext.save()
+                    }
+                }
+            }
+            
+            // Final save
             try viewContext.save()
+            
             alertMessage = "Successfully imported \(importedCount) products"
             showAlert = true
-            isImporting = false
+            
+            // Print some sample data for verification
+            let sampleRequest: NSFetchRequest<Product> = Product.fetchRequest()
+            sampleRequest.fetchLimit = 5
+            let samples = try viewContext.fetch(sampleRequest)
+            for sample in samples {
+                print("Imported: \(sample.name ?? "unknown") - R$ \(sample.currentPrice)")
+            }
+            
         } catch {
             alertMessage = "Error importing products: \(error.localizedDescription)"
             showAlert = true
-            isImporting = false
+            print("Import error: \(error)")
         }
-    }
-    
-    private func clearExistingProducts() {
-        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Product.fetchRequest()
-        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
         
-        do {
-            try viewContext.execute(deleteRequest)
-            try viewContext.save()
-        } catch {
-            print("Error clearing products: \(error)")
-        }
+        isImporting = false
     }
 }
