@@ -1,10 +1,9 @@
 import Foundation
 import CoreData
-import SwiftUI
 
 class ProductImporter: ObservableObject {
     @Published var isImporting = false
-    @Published var importError: String?
+    @Published var errorMessage: String?
     @Published var showAlert = false
     @Published var alertMessage = ""
     let viewContext: NSManagedObjectContext
@@ -13,88 +12,123 @@ class ProductImporter: ObservableObject {
         self.viewContext = context
     }
     
-    private func parsePrice(from string: String) -> Double {
-        // Remove newlines, currency symbol, and spaces
-        var cleanString = string
+    private func parsePrice(from string: String) throws -> Double {
+        let cleanString = string
             .replacingOccurrences(of: "\n", with: "")
             .replacingOccurrences(of: "\r", with: "")
             .replacingOccurrences(of: "R$", with: "")
-            .replacingOccurrences(of: "\u{00A0}", with: "") // Remove non-breaking space
+            .replacingOccurrences(of: "\u{00A0}", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
         
-        // Replace comma with dot for decimal
-        cleanString = cleanString.replacingOccurrences(of: ",", with: ".")
-        
-        // Try to convert to Double
-        if let price = Double(cleanString) {
-            return price
+        guard let price = Double(cleanString) else {
+            throw DynaPriceError.validationError("Invalid price format: \(string)")
         }
         
-        print("Could not parse price from string: '\(string)', cleaned string: '\(cleanString)'")
-        return 0.0
+        return price
     }
     
     func importProducts(from csvString: String) {
         isImporting = true
-        importError = nil
-        
-        // Clean the CSV string to remove any problematic characters
-        let cleanCSV = csvString.replacingOccurrences(of: "\r", with: "")
-        let rows = cleanCSV.components(separatedBy: "\n")
-        var importedCount = 0
+        clearError()
         
         do {
-            // Clear existing products first
-            let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Product.fetchRequest()
-            let batchDeleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
-            try viewContext.execute(batchDeleteRequest)
-            viewContext.reset() // Reset the context after batch delete
+            let cleanCSV = csvString.replacingOccurrences(of: "\r", with: "")
+            let rows = cleanCSV.components(separatedBy: "\n")
             
-            // Process each row and create products
+            guard rows.count > 1 else {
+                throw DynaPriceError.dataImportError("CSV file is empty or invalid")
+            }
+            
+            try clearExistingProducts()
+            
+            var importedCount = 0
             for row in rows.dropFirst() where !row.isEmpty {
                 let columns = row.components(separatedBy: ";")
                 
-                if columns.count >= 12 {
-                    let product = Product(context: viewContext)
-                    product.itemCode = columns[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.ean = columns[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.name = columns[2].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.brand = columns[3].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.productDescription = columns[4].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.category = columns[8].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.department = columns[9].trimmingCharacters(in: .whitespacesAndNewlines)
-                    product.currentPrice = parsePrice(from: columns[11])
-                    product.lastUpdate = Date()
-                    
-                    importedCount += 1
-                    
-                    // Save periodically to avoid memory issues
-                    if importedCount % 50 == 0 {
-                        try viewContext.save()
-                    }
+                guard columns.count >= 12 else {
+                    throw DynaPriceError.validationError("Invalid row format: insufficient columns")
+                }
+                
+                try importProduct(columns: columns)
+                importedCount += 1
+                
+                if importedCount % 50 == 0 {
+                    try viewContext.save()
+                    AppLogger.shared.info("Saved batch of \(importedCount) products", category: .database)
                 }
             }
             
-            // Final save
             try viewContext.save()
-            
             alertMessage = "Successfully imported \(importedCount) products"
-            showAlert = true
-            
-            // Print some sample data for verification
-            let sampleRequest: NSFetchRequest<Product> = Product.fetchRequest()
-            sampleRequest.fetchLimit = 5
-            let samples = try viewContext.fetch(sampleRequest)
-            for sample in samples {
-                print("Imported: \(sample.name ?? "unknown") - R$ \(sample.currentPrice)")
-            }
+            AppLogger.shared.info("Import completed: \(importedCount) products", category: .database)
             
         } catch {
-            alertMessage = "Error importing products: \(error.localizedDescription)"
-            showAlert = true
-            print("Import error: \(error)")
+            handleError(error)
         }
         
+        showAlert = true
         isImporting = false
+    }
+    
+    private func clearExistingProducts() throws {
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Product.fetchRequest()
+        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try viewContext.execute(batchDelete)
+            try viewContext.save()
+            viewContext.reset()
+        } catch {
+            throw DynaPriceError.databaseError("Failed to clear existing products: \(error.localizedDescription)")
+        }
+    }
+    
+    private func importProduct(columns: [String]) throws {
+        let product = Product(context: viewContext)
+        
+        guard let itemCode = columns[safe: 0]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let ean = columns[safe: 1]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !itemCode.isEmpty, !ean.isEmpty else {
+            throw DynaPriceError.validationError("Missing required product identifiers")
+        }
+        
+        product.itemCode = itemCode
+        product.ean = ean
+        product.name = columns[safe: 2]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        product.brand = columns[safe: 3]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        product.productDescription = columns[safe: 4]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        product.category = columns[safe: 8]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        product.department = columns[safe: 9]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if let priceString = columns[safe: 11] {
+            product.currentPrice = try parsePrice(from: priceString)
+        } else {
+            throw DynaPriceError.validationError("Missing price for product: \(ean)")
+        }
+        
+        product.lastUpdate = Date()
+    }
+    
+    private func handleError(_ error: Error) {
+        if let dynaError = error as? DynaPriceError {
+            errorMessage = dynaError.localizedDescription
+            alertMessage = dynaError.localizedDescription
+        } else {
+            errorMessage = error.localizedDescription
+            alertMessage = error.localizedDescription
+        }
+        ErrorHandler.shared.handle(error, category: .database)
+    }
+    
+    private func clearError() {
+        errorMessage = nil
+        alertMessage = ""
+    }
+}
+
+extension Collection {
+    subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }

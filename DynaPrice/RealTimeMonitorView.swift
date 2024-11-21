@@ -5,16 +5,13 @@ struct RealTimeMonitorView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var simulatorViewModel: POSSimulatorViewModel
     @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Sale.date, ascending: false)],
-        animation: .default)
-    private var recentSales: FetchedResults<Sale>
-    
-    // Track active suggestions
-    @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \PriceSuggestion.createdAt, ascending: false)],
         predicate: NSPredicate(format: "status == %@", "pending"),
         animation: .default)
     private var suggestions: FetchedResults<PriceSuggestion>
+    
+    @State private var errorMessage: String?
+    @State private var showErrorAlert = false
     
     init(viewContext: NSManagedObjectContext) {
         _simulatorViewModel = StateObject(wrappedValue: POSSimulatorViewModel(context: viewContext))
@@ -23,225 +20,255 @@ struct RealTimeMonitorView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Simulation Status Bar
-                simulationStatusBar
-                
-                // Main Content
                 ScrollView {
-                    LazyVStack(spacing: 16) {
-                        // Active Suggestions Card
+                    VStack(spacing: 16) {
+                        recentSalesList
+                        
                         if !suggestions.isEmpty {
-                            activeSuggestionsCard
+                            priceSuggestionsCard
                         }
-                        
-                        // Recent Activity Card
-                        recentActivityCard
-                        
-                        // Live Metrics Card
-                        liveMetricsCard
                     }
                     .padding()
                 }
             }
-            .navigationTitle("Live Monitor")
+            .navigationTitle("Real-Time Monitor")
+            //.navigationBarTitleDisplayMode(.inline)
+            .alert("Error", isPresented: $showErrorAlert) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "An unknown error occurred")
+            }
         }
     }
     
     private var simulationStatusBar: some View {
+        VStack(spacing: 0) {
             HStack(spacing: 16) {
-                // Simulation Status
-                Label(
-                    simulatorViewModel.isRunning ? "Running" : "Stopped",
-                    systemImage: simulatorViewModel.isRunning ? "circle.fill" : "circle"
-                )
-                .foregroundColor(simulatorViewModel.isRunning ? .green : .red)
-                
-                Divider()
-                
-                // Speed
-                Label("\(simulatorViewModel.speedMultiplier)x", systemImage: "speedometer")
-                
-                Divider()
-                
-                // Time - Fixed formatting
-                Label(
-                    simulatorViewModel.simulationTime.formatted(date: .omitted, time: .shortened),
-                    systemImage: "clock"
-                )
-                .font(.caption)
+                SimulationStatusIndicator(isRunning: simulatorViewModel.isRunning)
+                SimulationSpeedIndicator(speed: simulatorViewModel.speedMultiplier)
+                SimulationTimeDisplay(time: simulatorViewModel.simulationTime)
             }
-            .padding(8)
-            .background(Color(.systemGray6))
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.systemBackground))
         }
+        .background(Color(.systemBackground))
+        .shadow(radius: 1)
+    }
     
-    private var activeSuggestionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Active Price Suggestions")
-                .font(.headline)
+    private var recentSalesList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "cart.fill")
+                Text("Recent Sales")
+                    .font(.headline)
+            }
+            .padding(.bottom, 4)
+            
+            if simulatorViewModel.recentSales.isEmpty {
+                Text("No sales recorded")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            } else {
+                ForEach(simulatorViewModel.recentSales.prefix(10)) { sale in
+                    SaleRow(sale: sale)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 1)
+    }
+    
+    private var priceSuggestionsCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Price Suggestions")
+                    .font(.headline)
+                Spacer()
+                Button(action: rejectAllSuggestions) {
+                    Text("Reject All")
+                        .foregroundColor(.red)
+                }
+            }
             
             ForEach(suggestions) { suggestion in
-                suggestionRow(suggestion)
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    private func suggestionRow(_ suggestion: PriceSuggestion) -> some View {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(suggestion.product?.name ?? "Unknown Product")
-                            .font(.subheadline)
-                            .bold()
-                        
-                        // Add trigger name
-                        if let triggerName = suggestion.trigger?.name {
-                            Text("Trigger: \(triggerName)")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                        }
-                        
-                        Text(suggestion.reason ?? "")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                    Spacer()
-                    priceChangeLabel(
-                        current: suggestion.currentPrice,
-                        suggested: suggestion.suggestedPrice
-                    )
-                }
+                PriceSuggestionRow(
+                    suggestion: suggestion,
+                    onAccept: { acceptSuggestion(suggestion) },
+                    onReject: { rejectSuggestion(suggestion) }
+                )
                 
-                HStack {
-                    Button("Accept") {
-                        acceptSuggestion(suggestion)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    Button("Reject") {
-                        rejectSuggestion(suggestion)
-                    }
-                    .buttonStyle(.bordered)
-                    .foregroundColor(.red)
+                if suggestion.id != suggestions.last?.id {
+                    Divider()
                 }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(8)
-        }
-    
-    private var recentActivityCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Activity")
-                .font(.headline)
-            
-            ForEach(recentSales.prefix(5)) { sale in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(getProductName(for: sale))
-                            .font(.subheadline)
-                        Text("\(sale.quantity) units at R$ \(sale.unitPrice, specifier: "%.2f")")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                    Spacer()
-                    Text(sale.date ?? Date(), style: .time)
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                }
-                .padding(.vertical, 4)
             }
         }
         .padding()
         .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
+        .cornerRadius(10)
+        .shadow(radius: 1)
     }
     
-    private var liveMetricsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Live Metrics")
-                .font(.headline)
+    private func acceptSuggestion(_ suggestion: PriceSuggestion) {
+        viewContext.performAndWait {
+            do {
+                suggestion.product?.currentPrice = suggestion.suggestedPrice
+                suggestion.status = "accepted"
+                try viewContext.save()
+            } catch {
+                errorMessage = "Failed to accept suggestion: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
+    }
+    
+    private func rejectSuggestion(_ suggestion: PriceSuggestion) {
+        viewContext.performAndWait {
+            do {
+                suggestion.status = "rejected"
+                try viewContext.save()
+            } catch {
+                errorMessage = "Failed to reject suggestion: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
+    }
+    
+    private func rejectAllSuggestions() {
+        viewContext.performAndWait {
+            do {
+                suggestions.forEach { $0.status = "rejected" }
+                try viewContext.save()
+            } catch {
+                errorMessage = "Failed to reject suggestions: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
+    }
+}
+
+// MARK: - Supporting Views
+struct SimulationStatusIndicator: View {
+    let isRunning: Bool
+    
+    var body: some View {
+        Label(
+            isRunning ? "Running" : "Stopped",
+            systemImage: isRunning ? "circle.fill" : "circle"
+        )
+        .foregroundColor(isRunning ? .green : .red)
+        .font(.subheadline)
+    }
+}
+
+struct SimulationSpeedIndicator: View {
+    let speed: Int
+    
+    var body: some View {
+        Label(
+            "\(speed)x",
+            systemImage: "speedometer"
+        )
+        .font(.subheadline)
+    }
+}
+
+struct SimulationTimeDisplay: View {
+    let time: Date
+    
+    var body: some View {
+        Label(
+            time.formatted(date: .omitted, time: .shortened),
+            systemImage: "clock"
+        )
+        .font(.subheadline)
+    }
+}
+
+struct SaleRow: View {
+    let sale: Sale
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(sale.product?.name ?? "Unknown Product")
+                    .font(.system(.body, design: .rounded))
+                    .lineLimit(1)
+                
+                Text(sale.ean ?? "")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("\(sale.quantity) units")
+                    .font(.subheadline)
+                
+                Text(String(format: "R$ %.2f", sale.totalAmount))
+                    .font(.subheadline)
+                    .bold()
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct PriceSuggestionRow: View {
+    let suggestion: PriceSuggestion
+    let onAccept: () -> Void
+    let onReject: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(suggestion.product?.name ?? "Unknown")
+                    .font(.system(.body, design: .rounded))
+                    .bold()
+                Spacer()
+                priceChangeLabel
+            }
+            
+            if let reason = suggestion.reason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
             
             HStack {
-                metricBox(
-                    title: "Total Sales",
-                    value: "\(simulatorViewModel.totalSalesGenerated)"
-                )
+                Button(action: onAccept) {
+                    Label("Accept", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
                 
-                Divider()
-                
-                metricBox(
-                    title: "Active Suggestions",
-                    value: "\(suggestions.count)"
-                )
-                
-                Divider()
-                
-                metricBox(
-                    title: "Recent Sales",
-                    value: "\(recentSales.prefix(100).count)"
-                )
+                Button(action: onReject) {
+                    Label("Reject", systemImage: "xmark")
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.bordered)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
     }
     
-    private func metricBox(title: String, value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.gray)
-            Text(value)
-                .font(.title2)
-                .bold()
-        }
-        .frame(maxWidth: .infinity)
-    }
-    
-    private func priceChangeLabel(current: Double, suggested: Double) -> some View {
-        let percentChange = ((suggested - current) / current) * 100
-        return HStack {
+    private var priceChangeLabel: some View {
+        let percentChange = ((suggestion.suggestedPrice - suggestion.currentPrice) / suggestion.currentPrice) * 100
+        
+        return HStack(spacing: 4) {
             Image(systemName: percentChange >= 0 ? "arrow.up.right" : "arrow.down.right")
-            Text("\(abs(percentChange), specifier: "%.1f")%")
+            Text(String(format: "%.1f%%", abs(percentChange)))
         }
+        .font(.caption.bold())
         .foregroundColor(percentChange >= 0 ? .green : .red)
-        .font(.caption)
-        .padding(4)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .background(
             (percentChange >= 0 ? Color.green : Color.red)
                 .opacity(0.1)
         )
-        .cornerRadius(4)
-    }
-    
-    private func getProductName(for sale: Sale) -> String {
-        let request = NSFetchRequest<Product>(entityName: "Product")
-        request.predicate = NSPredicate(format: "ean == %@", sale.ean ?? "")
-        request.fetchLimit = 1
-        
-        do {
-            let products = try viewContext.fetch(request)
-            return products.first?.name ?? "Unknown Product"
-        } catch {
-            return "Unknown Product"
-        }
-    }
-    
-    private func acceptSuggestion(_ suggestion: PriceSuggestion) {
-        suggestion.product?.currentPrice = suggestion.suggestedPrice
-        suggestion.status = "accepted"
-        try? viewContext.save()
-    }
-    
-    private func rejectSuggestion(_ suggestion: PriceSuggestion) {
-        suggestion.status = "rejected"
-        try? viewContext.save()
+        .cornerRadius(8)
     }
 }

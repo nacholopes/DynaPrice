@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23222.3" systemVersion="23G93" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="HourlyBaseline" representedClassName="HourlyBaseline" syncable="YES" codeGenerationType="class">
+        <attribute name="dailyMeans" optional="YES" attributeType="Transformable" valueTransformerName="DoubleArrayTransformer" customClassName="NSArray"/>
+        <attribute name="dailyMedians" optional="YES" attributeType="Transformable" valueTransformerName="DoubleArrayTransformer" customClassName="NSArray"/>
+        <attribute name="dowMeans" optional="YES" attributeType="Transformable" valueTransformerName="DoubleArrayTransformer" customClassName="NSArray"/>
+        <attribute name="dowMedians" optional="YES" attributeType="Transformable" valueTransformerName="DoubleArrayTransformer" customClassName="NSArray"/>
+        <attribute name="ean" optional="YES" attributeType="String"/>
+        <attribute name="hourPeriod" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="monthlyMeans" optional="YES" attributeType="Transformable" valueTransformerName="DoubleArrayTransformer" customClassName="NSArray"/>
+        <attribute name="monthlyMedians" optional="YES" attributeType="Transformable" valueTransformerName="DoubleArrayTransformer" customClassName="NSArray"/>
+        <attribute name="totalMeanQuantity" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="totalMedianQuantity" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="product" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Product" inverseName="baseline" inverseEntity="Product"/>
+    </entity>
     <entity name="PriceSuggestion" representedClassName="PriceSuggestion" syncable="YES" codeGenerationType="class">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="currentPrice" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -41,6 +54,8 @@
         <attribute name="name" optional="YES" attributeType="String"/>
         <attribute name="productDescription" optional="YES" attributeType="String"/>
         <attribute name="templateId" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="baseline" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="HourlyBaseline" inverseName="product" inverseEntity="HourlyBaseline"/>
+        <relationship name="sales" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Sale" inverseName="product" inverseEntity="Sale"/>
         <relationship name="suggestions" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="PriceSuggestion" inverseName="product" inverseEntity="PriceSuggestion"/>
     </entity>
     <entity name="Sale" representedClassName="Sale" syncable="YES" codeGenerationType="class">
@@ -54,6 +69,7 @@
         <attribute name="quantity" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="totalAmount" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="unitPrice" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="product" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Product" inverseName="sales" inverseEntity="Product"/>
     </entity>
     <entity name="User" representedClassName="User" syncable="YES" codeGenerationType="class">
         <attribute name="email" optional="YES" attributeType="String"/>

@@ -4,14 +4,20 @@ import CoreData
 struct SettingsView: View {
     let viewContext: NSManagedObjectContext
     @ObservedObject var authViewModel: AuthenticationViewModel
-    @StateObject private var simulatorViewModel: POSSimulatorViewModel  // Add this
+    @StateObject private var simulatorViewModel: POSSimulatorViewModel
     @State private var showResetAlert = false
-    @State private var showSimulationResetAlert = false
+    @State private var selectedTrigger: PriceTrigger?
+    
+    // Fetch active triggers
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \PriceTrigger.name, ascending: true)],
+        predicate: NSPredicate(format: "active == YES"),
+        animation: .default
+    ) private var activeTriggers: FetchedResults<PriceTrigger>
     
     init(viewContext: NSManagedObjectContext, authViewModel: AuthenticationViewModel) {
         self.viewContext = viewContext
         self.authViewModel = authViewModel
-        // Initialize simulator view model
         _simulatorViewModel = StateObject(wrappedValue: POSSimulatorViewModel(context: viewContext))
     }
     
@@ -19,24 +25,123 @@ struct SettingsView: View {
         NavigationView {
             List {
                 Section(header: Text("POS Simulator")) {
-                    simulatorControls
-                }
-                
-                Section(header: Text("Data Management")) {
-                    Button(role: .destructive, action: {
-                        showResetAlert = true
-                    }) {
-                        Label("Reset Product Database", systemImage: "trash")
+                    VStack(spacing: 16) {
+                        // Start/Stop Button
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(simulatorViewModel.isRunning ? Color.red : Color.green)
+                            
+                            Button(action: {
+                                withAnimation {
+                                    simulatorViewModel.toggleSimulation()
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: simulatorViewModel.isRunning ? "stop.fill" : "play.fill")
+                                    Text(simulatorViewModel.isRunning ? "Stop Simulation" : "Start Simulation")
+                                }
+                                .foregroundColor(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .frame(height: 44)
+                        
+                        // Status Indicator
+                        HStack {
+                            Label("Status:", systemImage: "circle.fill")
+                                .foregroundColor(simulatorViewModel.isRunning ? .green : .red)
+                            Text(simulatorViewModel.isRunning ? "Running" : "Stopped")
+                                .foregroundColor(simulatorViewModel.isRunning ? .green : .red)
+                        }
+                        
+                        Divider()
+                        
+                        // Speed Control
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Simulation Speed")
+                                .font(.headline)
+                            Picker("Simulation Speed", selection: .init(
+                                get: { simulatorViewModel.speedMultiplier },
+                                set: { simulatorViewModel.setSpeed($0) }
+                            )) {
+                                Text("1x").tag(1)
+                                Text("5x").tag(5)
+                                Text("10x").tag(10)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                        }
+                        
+                        Divider()
+                        
+                        // Sales Boost Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Sales Boost")
+                                .font(.headline)
+                            
+                            if activeTriggers.isEmpty {
+                                Text("No active triggers available")
+                                    .foregroundColor(.gray)
+                                    .italic()
+                            } else {
+                                Picker("Select Trigger", selection: $selectedTrigger) {
+                                    Text("Select a trigger").tag(nil as PriceTrigger?)
+                                    ForEach(activeTriggers) { trigger in
+                                        Text(trigger.name ?? "Unknown")
+                                            .tag(trigger as PriceTrigger?)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                
+                                if let selectedTrigger = selectedTrigger {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Selected Trigger Details:")
+                                            .font(.subheadline)
+                                        TriggerDetailView(trigger: selectedTrigger)
+                                        
+                                        Button(action: {
+                                            toggleBoost()
+                                        }) {
+                                            HStack {
+                                                Image(systemName: simulatorViewModel.isBoostActive ? "bolt.fill" : "bolt")
+                                                Text(simulatorViewModel.isBoostActive ? "Stop Boost" : "Start Boost")
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                            .background(simulatorViewModel.isBoostActive ? Color.orange : Color.blue)
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Reset Button
+                        Button(action: {
+                            simulatorViewModel.resetSimulation()
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text("Reset Simulation")
+                            }
+                            .foregroundColor(.red)
+                            .padding(.vertical, 8)
+                        }
                     }
-                    
-                    Button(role: .destructive, action: {
-                        showSimulationResetAlert = true
-                    }) {
-                        Label("Reset Simulation Data", systemImage: "arrow.counterclockwise")
-                    }
+                    .padding(.vertical, 8)
+                    .listRowInsets(EdgeInsets())
+                    .buttonStyle(BorderlessButtonStyle())
                 }
                 
                 Section {
+                    Button("Reset Database") {
+                        showResetAlert = true
+                    }
+                    .foregroundColor(.orange)
+                    
                     Button("Logout") {
                         authViewModel.logout()
                     }
@@ -49,85 +154,23 @@ struct SettingsView: View {
                 Button("Reset", role: .destructive) {
                     resetProducts()
                 }
-            } message: {
-                Text("This will delete all products. Are you sure?")
-            }
-            .alert("Reset Simulation", isPresented: $showSimulationResetAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Reset", role: .destructive) {
-                    simulatorViewModel.resetSimulation()
-                }
-            } message: {
-                Text("This will clear all simulation data. Are you sure?")
             }
         }
     }
     
-    private var simulatorControls: some View {
-        VStack(spacing: 16) {
-            // Simulator Status and Controls
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Status: \(simulatorViewModel.isRunning ? "Running" : "Stopped")")
-                        .font(.subheadline)
-                    Text("Speed: \(simulatorViewModel.speedMultiplier)x")
-                        .font(.subheadline)
-                }
-                Spacer()
-                HStack {
-                    Button(action: { simulatorViewModel.toggleSimulation() }) {
-                        Image(systemName: simulatorViewModel.isRunning ? "stop.fill" : "play.fill")
-                            .foregroundColor(simulatorViewModel.isRunning ? .red : .green)
-                    }
-                }
-            }
-            
-            // Speed Control
-            Picker("Simulation Speed", selection: .init(
-                get: { simulatorViewModel.speedMultiplier },
-                set: { simulatorViewModel.setSpeed($0) }
-            )) {
-                Text("1x").tag(1)
-                Text("5x").tag(5)
-                Text("10x").tag(10)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            
-            // Pattern Toggles
-            Toggle("Weekend Sales Boost", isOn: .init(
-                get: { simulatorViewModel.enableWeekendBoost },
-                set: { simulatorViewModel.enableWeekendBoost = $0 }
-            ))
-            
-            Toggle("Lunch Hour Rush", isOn: .init(
-                get: { simulatorViewModel.enableLunchRush },
-                set: { simulatorViewModel.enableLunchRush = $0 }
-            ))
-            
-            Toggle("Payday Effect", isOn: .init(
-                get: { simulatorViewModel.enablePaydayEffect },
-                set: { simulatorViewModel.enablePaydayEffect = $0 }
-            ))
-            
-            // Simulation Stats
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Total Sales: \(simulatorViewModel.totalSalesGenerated)")
-                    .font(.caption)
-                Text("Simulation Time: \(simulatorViewModel.simulationTime.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption)
-            }
-            .foregroundColor(.gray)
+    private func toggleBoost() {
+        if simulatorViewModel.isBoostActive {
+            simulatorViewModel.deactivateBoost()
+        } else if let trigger = selectedTrigger {
+            simulatorViewModel.activateBoost(trigger: trigger)
         }
-        .padding(.vertical, 8)
     }
     
     private func resetProducts() {
-        // First stop simulation if running
         if simulatorViewModel.isRunning {
             simulatorViewModel.toggleSimulation()
         }
         
-        // Delete all products
         let fetchRequest: NSFetchRequest<NSFetchRequestResult> = Product.fetchRequest()
         let batchDelete = NSBatchDeleteRequest(fetchRequest: fetchRequest)
         
@@ -138,5 +181,29 @@ struct SettingsView: View {
         } catch {
             print("Error resetting products: \(error)")
         }
+    }
+}
+
+struct TriggerDetailView: View {
+    let trigger: PriceTrigger
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if trigger.triggerType == "salesVolume" {
+                Text("Type: Sales Volume")
+                Text("Direction: \(trigger.direction?.capitalized ?? "N/A")")
+                Text("Threshold: \(Int(trigger.percentageThreshold))%")
+                Text("Time Window: \(trigger.timeWindow) hours")
+            } else if trigger.triggerType == "timeBasedRule" {
+                Text("Type: Time-Based")
+                Text("Window: \(trigger.timeWindowStart):00 - \(trigger.timeWindowEnd):00")
+                if let days = trigger.daysOfWeek {
+                    Text("Days: \(days)")
+                }
+            }
+            Text("Price Change: \(Int(trigger.priceChangePercentage))%")
+        }
+        .font(.caption)
+        .foregroundColor(.secondary)
     }
 }

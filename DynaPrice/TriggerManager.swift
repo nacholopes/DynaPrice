@@ -3,6 +3,7 @@ import CoreData
 
 class TriggerManager: ObservableObject {
     @Published var triggers: [PriceTrigger] = []
+    @Published var errorMessage: String?
     private let viewContext: NSManagedObjectContext
 
     init(context: NSManagedObjectContext) {
@@ -11,24 +12,26 @@ class TriggerManager: ObservableObject {
     }
 
     func fetchTriggers() {
-        let request = NSFetchRequest<PriceTrigger>(entityName: "PriceTrigger")
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \PriceTrigger.name, ascending: true)]
-        
         do {
+            let request = NSFetchRequest<PriceTrigger>(entityName: "PriceTrigger")
+            request.sortDescriptors = [NSSortDescriptor(keyPath: \PriceTrigger.name, ascending: true)]
             triggers = try viewContext.fetch(request)
-            print("Fetched \(triggers.count) triggers")
+            AppLogger.shared.info("Fetched \(triggers.count) triggers", category: .trigger)
         } catch {
-            print("Error fetching triggers: \(error)")
+            handleError(.triggerError("Failed to fetch triggers: \(error.localizedDescription)"))
         }
     }
     
     func deleteTrigger(_ trigger: PriceTrigger) {
-        viewContext.delete(trigger)
-        try? viewContext.save()
-        fetchTriggers()
+        do {
+            viewContext.delete(trigger)
+            try viewContext.save()
+            fetchTriggers()
+        } catch {
+            handleError(.triggerError("Failed to delete trigger: \(error.localizedDescription)"))
+        }
     }
 
-    // Original sales volume trigger
     func addNewTrigger(name: String,
                       triggerType: String,
                       active: Bool,
@@ -36,86 +39,116 @@ class TriggerManager: ObservableObject {
                       timeWindow: Int16,
                       priceChangePercentage: Double,
                       direction: String) {
-        let newTrigger = PriceTrigger(context: viewContext)
-        newTrigger.name = name
-        newTrigger.triggerType = triggerType
-        newTrigger.active = active
-        newTrigger.percentageThreshold = percentageThreshold
-        newTrigger.timeWindow = timeWindow
-        newTrigger.priceChangePercentage = priceChangePercentage
-        newTrigger.direction = direction
-        
-        print("Creating sales volume trigger: \(name)")
-        
         do {
+            guard !name.isEmpty else {
+                throw DynaPriceError.validationError("Trigger name cannot be empty")
+            }
+            
+            let newTrigger = PriceTrigger(context: viewContext)
+            newTrigger.name = name
+            newTrigger.triggerType = triggerType
+            newTrigger.active = active
+            newTrigger.percentageThreshold = percentageThreshold
+            newTrigger.timeWindow = timeWindow
+            newTrigger.priceChangePercentage = priceChangePercentage
+            newTrigger.direction = direction
+            
             try viewContext.save()
-            print("Trigger saved successfully")
+            AppLogger.shared.info("Created sales volume trigger: \(name)", category: .trigger)
             fetchTriggers()
+            
         } catch {
-            print("Error saving trigger: \(error)")
+            handleError(error)
         }
     }
     
-    // New time-based trigger
     func addNewTimeTrigger(name: String,
                           startHour: Int,
                           endHour: Int,
                           daysOfWeek: Set<Int>,
                           priceChangePercentage: Double) {
-        let newTrigger = PriceTrigger(context: viewContext)
-        newTrigger.name = name
-        newTrigger.triggerType = DynaPriceModels.TriggerType.timeBasedRule.rawValue
-        newTrigger.active = true
-        newTrigger.timeWindowStart = Int16(startHour)
-        newTrigger.timeWindowEnd = Int16(endHour)
-        newTrigger.daysOfWeek = daysOfWeek.map(String.init).joined(separator: ",")
-        newTrigger.priceChangePercentage = priceChangePercentage
-        
-        print("Creating time-based trigger: \(name)")
-        print("Hours: \(startHour)-\(endHour), Days: \(daysOfWeek)")
-        
         do {
+            guard !name.isEmpty else {
+                throw DynaPriceError.validationError("Trigger name cannot be empty")
+            }
+            
+            guard startHour >= 0 && startHour < 24 && endHour >= 0 && endHour < 24 else {
+                throw DynaPriceError.validationError("Invalid hour range")
+            }
+            
+            guard !daysOfWeek.isEmpty else {
+                throw DynaPriceError.validationError("Must select at least one day")
+            }
+            
+            let newTrigger = PriceTrigger(context: viewContext)
+            newTrigger.name = name
+            newTrigger.triggerType = DynaPriceModels.TriggerType.timeBasedRule.rawValue
+            newTrigger.active = true
+            newTrigger.timeWindowStart = Int16(startHour)
+            newTrigger.timeWindowEnd = Int16(endHour)
+            newTrigger.daysOfWeek = daysOfWeek.map(String.init).joined(separator: ",")
+            newTrigger.priceChangePercentage = priceChangePercentage
+            
             try viewContext.save()
-            print("Time trigger saved successfully")
+            AppLogger.shared.info("Created time-based trigger: \(name)", category: .trigger)
             fetchTriggers()
+            
         } catch {
-            print("Error saving time trigger: \(error)")
+            handleError(error)
         }
     }
     
-    // New competitor price trigger
     func addNewCompetitorTrigger(name: String,
                                 competitorNames: [String],
                                 thresholdPercentage: Double,
                                 priceChangePercentage: Double) {
-        let newTrigger = PriceTrigger(context: viewContext)
-        newTrigger.name = name
-        newTrigger.triggerType = DynaPriceModels.TriggerType.competitorPrice.rawValue
-        newTrigger.active = true
-        newTrigger.competitors = competitorNames.joined(separator: ",")
-        newTrigger.percentageThreshold = thresholdPercentage
-        newTrigger.priceChangePercentage = priceChangePercentage
-        
-        print("Creating competitor trigger: \(name)")
-        print("Competitors: \(competitorNames)")
-        
         do {
+            guard !name.isEmpty else {
+                throw DynaPriceError.validationError("Trigger name cannot be empty")
+            }
+            
+            guard !competitorNames.isEmpty else {
+                throw DynaPriceError.validationError("Must specify at least one competitor")
+            }
+            
+            let newTrigger = PriceTrigger(context: viewContext)
+            newTrigger.name = name
+            newTrigger.triggerType = "competitorPrice"
+            newTrigger.active = true
+            newTrigger.competitors = competitorNames.joined(separator: ",")
+            newTrigger.percentageThreshold = thresholdPercentage
+            newTrigger.priceChangePercentage = priceChangePercentage
+            
             try viewContext.save()
-            print("Competitor trigger saved successfully")
+            AppLogger.shared.info("Created competitor trigger: \(name)", category: .trigger)
             fetchTriggers()
+            
         } catch {
-            print("Error saving competitor trigger: \(error)")
+            handleError(error)
         }
     }
     
-    // Helper function to update existing trigger
     func updateTrigger(_ trigger: PriceTrigger) {
         do {
             try viewContext.save()
-            print("Trigger updated successfully")
+            AppLogger.shared.info("Updated trigger: \(trigger.name ?? "")", category: .trigger)
             fetchTriggers()
         } catch {
-            print("Error updating trigger: \(error)")
+            handleError(.triggerError("Failed to update trigger: \(error.localizedDescription)"))
         }
+    }
+    
+    private func handleError(_ error: Error) {
+        if let dynaError = error as? DynaPriceError {
+            errorMessage = dynaError.localizedDescription
+        } else {
+            errorMessage = error.localizedDescription
+        }
+        ErrorHandler.shared.handle(error, category: .trigger)
+    }
+    
+    private func handleError(_ dynaError: DynaPriceError) {
+        errorMessage = dynaError.localizedDescription
+        ErrorHandler.shared.handle(dynaError, category: .trigger)
     }
 }

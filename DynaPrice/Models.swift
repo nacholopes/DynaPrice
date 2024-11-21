@@ -12,20 +12,12 @@ enum DynaPriceModels {
     
     enum TriggerType: String, CaseIterable {
         case salesVolume = "salesVolume"
-        case competitorPrice = "competitorPrice"
         case timeBasedRule = "timeBasedRule"
-        case stockLevel = "stockLevel"
     }
     
     struct SalesMetrics {
-        let hourlyVolume: [Int: Int]  // hour -> quantity
-        let averageHourlyVolume: Double
+        let hourlyVolume: Int
+        let averageQuantity: Double
         let percentageChange: Double
-        let timeWindow: Int
     }
 }
-
-//// Type aliases for convenience
-//typealias SaleRecord = DynaPriceModels.SaleRecord
-//typealias TriggerType = DynaPriceModels.TriggerType
-//typealias SalesMetrics = DynaPriceModels.SalesMetrics

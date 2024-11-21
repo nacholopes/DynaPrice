@@ -12,16 +12,9 @@ struct MainTabView: View {
     
     var body: some View {
         TabView {
-            // New Real-time Monitor
             RealTimeMonitorView(viewContext: viewContext)
                 .tabItem {
-                    Label("Live Monitor", systemImage: "chart.xyaxis.line")
-                }
-            
-            // Original Monitor (you can keep or remove)
-            MonitoringView(viewContext: viewContext)
-                .tabItem {
-                    Label("History", systemImage: "clock.arrow.circlepath")
+                    Label("Monitor", systemImage: "chart.xyaxis.line")
                 }
             
             TriggerConfigView(viewContext: viewContext)

@@ -1,61 +1,85 @@
 import SwiftUI
 import CoreData
+import Combine
 
 class POSSimulatorViewModel: ObservableObject {
-    @Published private var simulator: POSSimulatorService
+    // Published Properties
+    @Published private(set) var isRunning = false
+    @Published private(set) var speedMultiplier: Int = 1
+    @Published private(set) var simulationTime: Date = Date()
+    @Published private(set) var recentSales: [Sale] = []
+    @Published var activeTrigger: PriceTrigger?
+    @Published var isBoostActive = false
+    
+    private let maxRecentSales = 5
+    private let simulator: POSSimulatorService
+    private var cancellables = Set<AnyCancellable>()
     
     init(context: NSManagedObjectContext) {
         self.simulator = POSSimulatorService(context: context)
+        setupBindings()
     }
     
-    // MARK: - Public Properties
-    var isRunning: Bool { simulator.isRunning }
-    var speedMultiplier: Int { simulator.speedMultiplier }
-    var totalSalesGenerated: Int { simulator.totalSalesGenerated }
-    var simulationTime: Date { simulator.simulationTime }
-    
-    // MARK: - Pattern Controls
-    var enableWeekendBoost: Bool {
-        get { simulator.enableWeekendBoost }
-        set { simulator.enableWeekendBoost = newValue }
+    private func setupBindings() {
+        simulator.$isRunning
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$isRunning)
+        
+        simulator.$speedMultiplier
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$speedMultiplier)
+        
+        simulator.$simulationTime
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$simulationTime)
+        
+        NotificationCenter.default.publisher(for: Notification.Name("com.dynaprice.newSaleGenerated"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if let sale = notification.object as? Sale {
+                    self?.addRecentSale(sale)
+                }
+            }
+            .store(in: &cancellables)
     }
     
-    var enableLunchRush: Bool {
-        get { simulator.enableLunchRush }
-        set { simulator.enableLunchRush = newValue }
+    private func addRecentSale(_ sale: Sale) {
+        recentSales.insert(sale, at: 0)
+        if recentSales.count > maxRecentSales {
+            recentSales.removeLast()
+        }
     }
     
-    var enablePaydayEffect: Bool {
-        get { simulator.enablePaydayEffect }
-        set { simulator.enablePaydayEffect = newValue }
-    }
-    
-    // MARK: - Control Methods
+    // Existing methods remain unchanged
     func toggleSimulation() {
-        if simulator.isRunning {
+        if isRunning {
             simulator.stopSimulation()
         } else {
             simulator.startSimulation()
         }
     }
     
-    func resetSimulation() {
-        simulator.resetSimulation()
+    func setSpeed(_ multiplier: Int) {
+        guard multiplier != speedMultiplier else { return }
+        simulator.setSpeed(multiplier)
     }
     
-    func setSpeed(_ multiplier: Int) {
-        guard multiplier != simulator.speedMultiplier else { return }
-        
-        // Restart simulation with new speed if running
-        let wasRunning = simulator.isRunning
-        if wasRunning {
-            simulator.stopSimulation()
-        }
-        
-        simulator.speedMultiplier = multiplier
-        
-        if wasRunning {
-            simulator.startSimulation()
-        }
+    func resetSimulation() {
+        simulator.resetSimulation()
+        deactivateBoost()
+    }
+    
+    func activateBoost(trigger: PriceTrigger) {
+        guard !isBoostActive else { return }
+        activeTrigger = trigger
+        isBoostActive = true
+        simulator.activateBoost(with: trigger)
+    }
+    
+    func deactivateBoost() {
+        guard isBoostActive else { return }
+        activeTrigger = nil
+        isBoostActive = false
+        simulator.deactivateBoost()
     }
 }
